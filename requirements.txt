@@ -1,0 +1,10 @@
+requests
+pandas
+numpy
+ta
+pyyaml
+langchain 
+langchain-anthropic
+pydantic
+python-dotenv
+

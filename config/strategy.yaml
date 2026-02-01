@@ -1,0 +1,23 @@
+api:
+  url: "https://api.0dtespx.com/aggregateData"
+  params:
+    series: "spx,vix,spxExpectedMove,spxOTMBids"
+
+    # https://api.0dtespx.com/aggregateData?series=spx,vix,spxExpectedMove,spxOTMBids&date=2026-01-30&interval=10
+    # https://api.0dtespx.com/aggregateData?series=spx,vix,spxExpectedMove,spxOTMBids&date=live&interval=10
+
+runtime:
+  fetch_interval_sec: 3
+  history_size: 200
+  interval_min: 5
+
+indicators:
+  rsi_period: 14
+  overbought: 70
+  oversold: 30
+
+risk:
+  safe_move_multiplier: 1.3
+  min_premium_ratio: 5.5
+  min_confidence: 0.65
+  max_vix: 20
