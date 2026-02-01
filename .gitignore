@@ -1,1 +1,34 @@
+# Environment / secrets
+.env
+.env.local
+.env.*           # catches .env.example, .env.test, etc. — be careful!
+
+# Python virtual environments (very common)
+.venv/
 venv/
+env/
+ENV/
+
+# Python caches & temporary files (good practice)
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE / editor folders (optional but recommended)
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+
+alert_log.csv
