@@ -93,7 +93,7 @@ def log_decision(signal, features):
         
         # create a dataframe and append to csv
         df = pd.DataFrame([log_entry])
-        log_file = Path("alert_log.csv")
+        log_file = Path(features.get("current_time").split(" ")[0] + "_" "alert_log.csv")
         if log_file.exists():
             df.to_csv(log_file, mode='a', header=False, index=False)
         else:

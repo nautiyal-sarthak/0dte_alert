@@ -31,4 +31,4 @@ build/
 Thumbs.db
 
 
-alert_log.csv
+*.csv

@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 # ✅ Load environment variables from .env file
 load_dotenv()
-ALERT_COOLDOWN_MINUTES = 25          # minimum time between alerts
+ALERT_COOLDOWN_MINUTES = 30          # minimum time between alerts
 PRICE_TOLERANCE_POINTS = 18          # skip if SPX moved less than this from last alert
 MARKET_TZ = ZoneInfo("America/New_York")
 MARKET_OPEN = (10, 0)     # 10:00 AM ET
@@ -118,11 +118,10 @@ def main():
             
                 
             decision = evaluate_with_agent(features)
+            log_decision(decision.model_dump(), features)
 
             if decision.trade and decision.confidence >= 0.7:
                 send_alert(decision.model_dump(), latest)
-                log_decision(decision.model_dump(), features)
-
                 # Update persistent state
                 
                 last_alert_time = now
