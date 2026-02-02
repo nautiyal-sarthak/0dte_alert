@@ -91,7 +91,7 @@ def main():
                 "bb_lower": round(latest["bb_lower"], 4),
                 "premium_ratio": round(latest["premium_ratio"], 2),
                 "time_to_close_min": int(latest["time_to_close"]),
-                "current_time": latest.name.strftime("%H:%M:%S"),
+                "current_time": latest.name.strftime("%Y-%m-%d %H:%M:%S"),
                 "data": latest.to_dict()
             }
 
