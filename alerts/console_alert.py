@@ -71,28 +71,31 @@ def send_alert(signal, latest):
 
 
 def log_decision(signal, features):
-    log_entry = {
-        "timestamp": features.get("current_time"),
-        "expected_move": features.get("expected_move"),
-        "vix": features.get("vix"),
-        "rsi": features.get("rsi"),
-        "macd": features.get("macd"),
-        "macd_signal": features.get("macd_signal"),
-        "macd_hist": features.get("macd_hist"),
-        "bb_upper": features.get("bb_upper"),
-        "bb_middle": features.get("bb_middle"),
-        "bb_lower": features.get("bb_lower"),
-        "premium_ratio": features.get("premium_ratio"),
-        "time_to_close_min": features.get("time_to_close_min"),
-        "trade": signal["trade"],
-        "confidence": signal["confidence"],
-    }
-    
-    # create a dataframe and append to csv
-    df = pd.DataFrame([log_entry])
-    log_file = Path("alert_log.csv")
-    if log_file.exists():
-        df.to_csv(log_file, mode='a', header=False, index=False)
-    else:
-        df.to_csv(log_file, index=False)
+    if signal["confidence"] >= 0.5:
+        log_entry = {
+            "timestamp": features.get("current_time"),
+            "expected_move": features.get("expected_move"),
+            "vix": features.get("vix"),
+            "rsi": features.get("rsi"),
+            "macd": features.get("macd"),
+            "macd_signal": features.get("macd_signal"),
+            "macd_hist": features.get("macd_hist"),
+            "bb_upper": features.get("bb_upper"),
+            "bb_middle": features.get("bb_middle"),
+            "bb_lower": features.get("bb_lower"),
+            "premium_ratio": features.get("premium_ratio"),
+            "time_to_close_min": features.get("time_to_close_min"),
+            "suggestion": signal["trade"],
+            "confidence": signal["confidence"],
+            "action_taken_by_you": "", #entered trade, ignored
+            "result": "" #profit, loss, breakeven
+        }
+        
+        # create a dataframe and append to csv
+        df = pd.DataFrame([log_entry])
+        log_file = Path("alert_log.csv")
+        if log_file.exists():
+            df.to_csv(log_file, mode='a', header=False, index=False)
+        else:
+            df.to_csv(log_file, index=False)
 
