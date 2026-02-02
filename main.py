@@ -8,12 +8,22 @@ from alerts.console_alert import send_alert, load_last_alert_state , log_decisio
 from agent.agent import evaluate_with_agent
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 
 # ✅ Load environment variables from .env file
 load_dotenv()
 ALERT_COOLDOWN_MINUTES = 25          # minimum time between alerts
 PRICE_TOLERANCE_POINTS = 18          # skip if SPX moved less than this from last alert
+MARKET_TZ = ZoneInfo("America/New_York")
+MARKET_OPEN = (10, 0)     # 10:00 AM ET
+MARKET_CLOSE = (14, 30)  # 2:30 PM ET
+
+
+def is_market_window(now_et: datetime) -> bool:
+    start = now_et.replace(hour=MARKET_OPEN[0], minute=MARKET_OPEN[1], second=0, microsecond=0)
+    end = now_et.replace(hour=MARKET_CLOSE[0], minute=MARKET_CLOSE[1], second=0, microsecond=0)
+    return start <= now_et <= end
 
 
 def load_config():
@@ -22,8 +32,8 @@ def load_config():
 
 
 def main():
-    date_in = "2026-01-30" # live
-    time_in =  "10:30:00"
+    date_in = "2026-01-29" #"2026-01-30" # live
+    time_in = "10:30:00" #"10:30:00"
     config = load_config()
 
     state = load_last_alert_state()
@@ -43,7 +53,21 @@ def main():
 
     print("📡 SPX 0-DTE Monitor Started...\n")
 
+    
     while True:
+        now_et = datetime.now(tz=MARKET_TZ)
+
+        if not is_market_window(now_et) and not time_in:
+            if now_et.hour < MARKET_OPEN[0] or (
+                now_et.hour == MARKET_OPEN[0] and now_et.minute < MARKET_OPEN[1]
+            ):
+                print(f"⏳ Waiting for market window... Current ET: {now_et.strftime('%H:%M:%S')}")
+                time.sleep(60)  # check every minute before open
+                continue
+            else:
+                print(f"🔕 Market window closed at {now_et.strftime('%H:%M:%S')} ET. Shutting down.")
+                break
+
         try:
             df = fetch_market_data(config["api"],config["runtime"]['interval_min'],date_in=date_in, time_in=time_in)
 
