@@ -7,7 +7,7 @@ api:
     # https://api.0dtespx.com/aggregateData?series=spx,vix,spxExpectedMove,spxOTMBids&date=live&interval=10
 
 runtime:
-  fetch_interval_sec: 3
+  fetch_interval_sec: 300
   history_size: 200
   interval_min: 5
 

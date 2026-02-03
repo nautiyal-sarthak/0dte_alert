@@ -16,7 +16,7 @@ load_dotenv()
 ALERT_COOLDOWN_MINUTES = 30          # minimum time between alerts
 PRICE_TOLERANCE_POINTS = 18          # skip if SPX moved less than this from last alert
 MARKET_TZ = ZoneInfo("America/New_York")
-MARKET_OPEN = (10, 0)     # 10:00 AM ET
+MARKET_OPEN = (10, 00)     # 10:00 AM ET
 MARKET_CLOSE = (14, 30)  # 2:30 PM ET
 
 
@@ -32,8 +32,8 @@ def load_config():
 
 
 def main():
-    date_in = "2026-01-29" #"2026-01-30" # live
-    time_in = "10:30:00" #"10:30:00"
+    date_in = "" #"2026-01-29" #"2026-01-30" # live
+    time_in = "" #"10:30:00" #"10:30:00"
     config = load_config()
 
     state = load_last_alert_state()
