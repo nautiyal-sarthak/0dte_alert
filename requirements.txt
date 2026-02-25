@@ -7,4 +7,4 @@ langchain
 langchain-anthropic
 pydantic
 python-dotenv
-
+tabulate

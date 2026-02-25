@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 import pandas as pd
+from tabulate import tabulate
+
 
 # ────────────────────────────────────────────────
 # Configuration (tune these)
@@ -94,6 +96,12 @@ def log_decision(signal, features):
 
     df = pd.DataFrame([log_entry])
 
+    #print the confidance score and the reasons for the signal in the console
+    print(f"Confidence Score: {signal['confidence']}")
+    print("Reasons for the signal:")
+    for reason in signal["reasons"]:
+        print(f"- {reason}")
+
     if signal["confidence"] >= 0.5:
         
         # create a dataframe and append to csv
@@ -103,6 +111,7 @@ def log_decision(signal, features):
         else:
             df.to_csv(log_file, index=False)
 
-    print(df.to_string(index=False))
+        # print the dataframe to the console 
+        #print(tabulate(df, headers='keys', tablefmt='psql'))
     
 

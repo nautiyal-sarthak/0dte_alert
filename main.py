@@ -9,6 +9,7 @@ from agent.agent import evaluate_with_agent
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import numpy as np
 
 
 # ✅ Load environment variables from .env file
@@ -16,8 +17,8 @@ load_dotenv()
 ALERT_COOLDOWN_MINUTES = 30          # minimum time between alerts
 PRICE_TOLERANCE_POINTS = 18          # skip if SPX moved less than this from last alert
 MARKET_TZ = ZoneInfo("America/New_York")
-MARKET_OPEN = (10, 00)     # 10:00 AM ET
-MARKET_CLOSE = (14, 30)  # 2:30 PM ET
+MARKET_OPEN = (9, 30)     # 10:00 AM ET
+MARKET_CLOSE = (16, 00)  # 2:30 PM ET
 
 
 def is_market_window(now_et: datetime) -> bool:
@@ -31,9 +32,75 @@ def load_config():
         return yaml.safe_load(f)
 
 
+def should_consider_trade(features: dict) -> bool:
+    """
+    Basic gate / pre-filter: should we even look at PCS or CCS setups right now?
+    Returns True only if general conditions are acceptable to consider a credit spread.
+    """
+    # ─── Required minimum conditions ────────────────────────────────────────
+    
+    # 1. VIX not too low → premiums need to be decent
+    if features["vix"] < 14.0:
+        print(f"VIX too low ({features['vix']}) — premiums likely too thin for good credit spreads.")
+        return False
+    
+    # 2. Not ridiculously high VIX (extreme fear / gap risk)
+    if features["vix"] > 38.0:
+        print(f"VIX too high ({features['vix']}) — extreme fear, gap risk, and likely not ideal for new credit spreads.")
+        return False
+
+    # 3. Time window — best theta decay & lower gamma risk
+    minutes_left = features["time_to_close_min"]
+    if minutes_left > 330:   # before ~9:45–10:00 ET
+        print(f"Too early in the day ({features['current_time']}) — market just opened, not ideal for new credit spreads.")
+        return False
+    if minutes_left < 60:    # last hour — gamma explosion risk, especially 0DTE
+        print(f"Too late in the day ({features['current_time']}) — last hour, gamma risk increases significantly for 0DTE credit spreads.")
+        return False
+    
+    # 4. Trend filter — avoid fighting very strong short-term momentum
+    #    We want mild trend or range → good for credit spreads
+    slope_5  = features["ema21_slope_5min"]
+    slope_15 = features["ema21_slope_15min"]
+    ret5     = features["ret_5min_pct"]
+    ret15    = features["ret_15min_pct"]
+
+    # Very strong momentum in last 5–15 min → usually bad for new credit spreads
+    if abs(ret5) > 0.80 or abs(ret15) > 1.40:
+        print(f"Strong momentum detected (5min: {ret5}%, 15min: {ret15}%) — usually not ideal for new credit spreads.")
+        return False
+
+    # Very steep short-term slope → momentum is probably not exhausted yet
+    if abs(slope_5) > 3.0:   # adjust threshold after backtesting (~3–4 pts/min is fast)
+        print(f"Steep short-term slope detected (5min EMA21 slope: {slope_5} pts/min) — momentum may not be exhausted, not ideal for new credit spreads.")
+        return False
+
+    # ─── Optional / tunable filters (comment out if too restrictive) ─────────
+
+    # Premium ratio extremely skewed → might indicate directional conviction
+    if features["premium_ratio"] < 3.0 :
+        print(f"Premium ratio too low ({features['premium_ratio']}) — may indicate directional bias, not ideal for balanced credit spreads.")
+        return False
+
+    # RSI in extreme territory → usually better to wait for mean reversion
+    # (you may want to remove this line if you LIKE fading extremes)
+    if features["rsi"] < 18 or features["rsi"] > 82:
+        print(f"RSI in extreme territory ({features['rsi']}) — may indicate overbought/oversold conditions, often better to wait for mean reversion before opening new credit spreads.")
+        return False
+    
+    # RSI is not very high or low
+    if features["rsi"] > 40 and features["rsi"] < 60:
+        print(f"RSI is neutral ({features['rsi']}) — may indicate lack of momentum, not ideal for new credit spreads which often benefit from some directional bias.")
+        return False
+
+    # ─── If we passed everything → okay to evaluate PCS / CCS logic next ─────
+    return True
+
 def main():
-    date_in = "" #"2026-01-29" #"2026-01-30" # live
-    time_in = "" #"10:30:00" #"10:30:00"
+
+    ##"2026-02-12" -- big down day
+    date_in = "2026-02-23" #"2026-01-29" #"2026-01-30" # live
+    time_in = "09:30:00" #"10:30:00" #"10:30:00"
     config = load_config()
 
     state = load_last_alert_state()
@@ -45,60 +112,78 @@ def main():
     # get data for last working day from date_in as string
     if not date_in or date_in.strip() == "":
         last_working_day = pd.Timestamp.now(tz="America/New_York") - pd.offsets.BDay(1)
+        run_type = "live"
     else:
         last_working_day = pd.to_datetime(date_in) - pd.offsets.BDay(1)
+        run_type = "backtest"
     
     last_working_day = last_working_day.strftime("%Y-%m-%d")
-    history = fetch_market_data(config["api"],config["runtime"]['interval_min'],date_in=last_working_day)
+    history = fetch_market_data(config["api"],config[run_type]['interval_min'],date_in=last_working_day)
 
     print("📡 SPX 0-DTE Monitor Started...\n")
 
     
     while True:
-        now_et = datetime.now(tz=MARKET_TZ)
-
-        if not is_market_window(now_et) and not time_in:
-            if now_et.hour < MARKET_OPEN[0] or (
-                now_et.hour == MARKET_OPEN[0] and now_et.minute < MARKET_OPEN[1]
-            ):
-                print(f"⏳ Waiting for market window... Current ET: {now_et.strftime('%H:%M:%S')}")
-                time.sleep(60)  # check every minute before open
-                continue
-            else:
-                print(f"🔕 Market window closed at {now_et.strftime('%H:%M:%S')} ET. Shutting down.")
-                break
-
         try:
-            df = fetch_market_data(config["api"],config["runtime"]['interval_min'],date_in=date_in, time_in=time_in)
+            df = fetch_market_data(config["api"],config[run_type]['interval_min'],date_in=date_in, time_in=time_in)
 
             history = pd.concat([history, df])
-            history = history.tail(config["runtime"]["history_size"])
+            history = history.tail(config[run_type]["history_size"])
 
             history = add_indicators(history, config["indicators"]["rsi_period"])
 
             latest = history.iloc[-1]
 
-            features = {
-                "current_price": round(latest["spx"], 2),
-                "expected_move": round(latest["spxExpectedMove"], 2),
-                "vix": round(latest["vix"], 2),
-                "rsi": round(latest["rsi"], 2),
-                "macd": round(latest["macd"], 4),
-                "macd_signal": round(latest["macd_signal"], 4),
-                "macd_hist": round(latest["macd_hist"], 4),
-                "bb_upper": round(latest["bb_upper"], 4),
-                "bb_middle": round(latest["bb_middle"], 4),
-                "bb_lower": round(latest["bb_lower"], 4),
-                "premium_ratio": round(latest["premium_ratio"], 2),
-                "time_to_close_min": int(latest["time_to_close"]),
-                "current_time": latest.name.strftime("%Y-%m-%d %H:%M:%S"),
-                "data": latest.to_dict()
-            }
+            # check if current_time is equal to the time_in or todays date if time_in is None
+            
 
+
+            features = {
+                        # ─── Core level & fear ───
+                        "current_price": round(latest["spx"], 2),
+                        "expected_move": round(latest["spxExpectedMove"], 2),
+                        "vix": round(latest["vix"], 2),
+                        
+                        # ─── Momentum classics ───
+                        "rsi": round(latest["rsi"], 1),
+                        "macd": round(latest["macd"], 4),
+                        "macd_hist": round(latest["macd_hist"], 4),
+                        "macd_signal": round(latest["macd_signal"], 4),
+
+                        # Add missing BB fields (adjust calculation if not directly in 'latest')
+                        "bb_upper": round(latest.get("bb_upper", np.nan), 2),  # e.g., if it's price relative to upper band
+                        "bb_lower": round(latest.get("bb_lower", np.nan), 2),  # e.g., if it's price relative to lower band
+                        "bb_middle": round(latest.get("bb_middle", np.nan), 2), # e.g., if it's price relative to middle band
+
+                        # ─── 0DTE + time sensitive ───
+                        "premium_ratio": round(latest["premium_ratio"], 2),
+                        "time_to_close_min": int(latest["time_to_close"]),
+                        "current_time": latest.name.strftime("%H:%M ET"),
+                        
+
+                        # ─── Position vs structure (most important upgrades) ───
+                        "ema9": round(latest.get("ema9", np.nan), 4),
+                        "ema21": round(latest.get("ema21", np.nan), 4),
+                        "ema50": round(latest.get("ema50", np.nan), 4),
+                        
+
+                        "ema21_slope_5min": round(latest["ema21_slope_5min"], 6),
+                        "ema21_slope_15min": round(latest["ema21_slope_15min"], 6),
+                        "ema21_slope_30min": round(latest["ema21_slope_30min"], 6),
+
+                        
+                        "ret_5min_pct":   round(latest.get("ret_5min", 0) * 100, 2),
+                        "ret_15min_pct":  round(latest.get("ret_15min", 0) * 100, 2),
+                        "ret_30min_pct":  round(latest.get("ret_30min", 0) * 100, 2),
+
+                        # Optional safety net: full row if you want to allow pattern spotting
+                        #"raw_row": latest.to_dict()   # ← only if token budget allows
+                    }
+            
 
             # if time_in is is not none then increment time_in by config["runtime"]['interval_min']
             if time_in:
-                t = pd.to_datetime(time_in) + pd.Timedelta(minutes=config["runtime"]['interval_min'])
+                t = pd.to_datetime(time_in) + pd.Timedelta(minutes=config[run_type]['interval_min'])
                 time_in = t.strftime("%H:%M:%S")
 
 
@@ -107,7 +192,7 @@ def main():
                 minutes_since = (now - last_alert_time).total_seconds() / 60
                 if minutes_since < ALERT_COOLDOWN_MINUTES:
                     print(f"⏳ Cooldown active — {minutes_since:.1f} min since last alert (need ≥ {ALERT_COOLDOWN_MINUTES})")
-                    time.sleep(config["runtime"]["fetch_interval_sec"])
+                    time.sleep(config[run_type]["fetch_interval_sec"])
                     continue
                 else:
                     print(f"✅ Cooldown passed — {minutes_since:.1f} min since last alert")
@@ -115,28 +200,34 @@ def main():
                     last_alert_price = None
                     del_last_alert_state()
 
-            
-                
-            decision = evaluate_with_agent(features)
-            log_decision(decision.model_dump(), features)
+            print(latest.name.strftime(("%Y-%m-%d %H:%M:%S")) )
+            if should_consider_trade(features):   
+                #print(latest)  
+                decision = evaluate_with_agent(features)
+                log_decision(decision.model_dump(), features)
 
-            if decision.trade and decision.confidence >= 0.7:
-                send_alert(decision.model_dump(), latest)
-                # Update persistent state
-                
-                last_alert_time = now
-                last_alert_price = round(latest["spx"], 2)
-                save_last_alert_state(last_alert_time, last_alert_price)
+                if decision.trade and decision.confidence >= 0.7:
+                    send_alert(decision.model_dump(), latest)
+                    
+                    # Update persistent state
+                    last_alert_time = now
+                    last_alert_price = round(latest["spx"], 2)
+                    save_last_alert_state(last_alert_time, last_alert_price)
 
-            else:
-                print(latest.name.strftime(("%Y-%m-%d %H:%M:%S")) + " -- " + "🤖 Agent says: no clean setup.")     
+                else:
+                    print("🤖 Agent says: no clean setup.")     
 
 
         except Exception as e:
             print("❌ Error:", e)
 
-        time.sleep(config["runtime"]["fetch_interval_sec"])
+        time.sleep(config[run_type]["fetch_interval_sec"])
+        print("-" * 50)
 
+        # close the while loop if features['time_to_close_min'] is zer0
+        # if features["time_to_close_min"] <= 0:
+        #     print("Market closed — ending monitor.")
+        #     break
 
 if __name__ == "__main__":
     main()

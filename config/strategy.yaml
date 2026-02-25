@@ -6,7 +6,7 @@ api:
     # https://api.0dtespx.com/aggregateData?series=spx,vix,spxExpectedMove,spxOTMBids&date=2026-01-30&interval=10
     # https://api.0dtespx.com/aggregateData?series=spx,vix,spxExpectedMove,spxOTMBids&date=live&interval=10
 
-runtime:
+live:
   fetch_interval_sec: 300
   history_size: 200
   interval_min: 5
@@ -21,3 +21,8 @@ risk:
   min_premium_ratio: 5.5
   min_confidence: 0.65
   max_vix: 20
+
+backtest:
+  fetch_interval_sec: 1
+  history_size: 200
+  interval_min: 5

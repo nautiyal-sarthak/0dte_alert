@@ -14,9 +14,6 @@ Rules:
 USER_PROMPT_TEMPLATE = """
 Evaluate the following market snapshot and decide if a 0-DTE trade is justified.
 
-Market Data:
-{data}
-
 Indicators:
 - Current Price: {current_price}
 - RSI (14): {rsi}
@@ -30,6 +27,16 @@ Options Context:
 - OTM Premium Ratio: {premium_ratio}
 - VIX: {vix}
 - Time to Market Close (min): {time_to_close_min}
+
+- ema9: {ema9}
+- ema21: {ema21}
+- ema50: {ema50}
+- ema21_slope_5min : {ema21_slope_5min}
+- ema21_slope_30min : {ema21_slope_30min}
+
+- ret_5min_pct : {ret_5min_pct}
+- ret_30min_pct : {ret_30min_pct}
+
 
 Return a structured decision.
 """
