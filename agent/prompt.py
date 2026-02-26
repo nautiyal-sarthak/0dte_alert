@@ -6,6 +6,8 @@ Rules:
 - Capital preservation > premium.
 - Overbought markets → favor SELL_CALL
 - Oversold markets → favor SELL_PUT
+- if market moving up rapidly and overbought, wait for pullback to SELL_CALL.
+- if market moving down rapidly and oversold, wait for pullback to SELL_PUT.
 - If signals conflict, return NONE.
 - Confidence must reflect setup quality, not excitement.
 - wait for the moment when the conditions are overbought/oversold and high OTM Premium Ratio.
@@ -31,11 +33,11 @@ Options Context:
 - ema9: {ema9}
 - ema21: {ema21}
 - ema50: {ema50}
-- ema21_slope_5min : {ema21_slope_5min}
-- ema21_slope_30min : {ema21_slope_30min}
+- ema21_slope_last_5min : {ema21_slope_5min}
+- ema21_slope_last_30min : {ema21_slope_30min}
 
-- ret_5min_pct : {ret_5min_pct}
-- ret_30min_pct : {ret_30min_pct}
+- return_%_last_5min : {ret_5min_pct}
+- return_%_last_30min : {ret_30min_pct}
 
 
 Return a structured decision.

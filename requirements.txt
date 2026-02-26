@@ -8,3 +8,4 @@ langchain-anthropic
 pydantic
 python-dotenv
 tabulate
+python-telegram-bot

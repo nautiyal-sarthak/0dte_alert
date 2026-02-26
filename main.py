@@ -4,7 +4,7 @@ import pandas as pd
 
 from data.fetcher import fetch_market_data
 from indicators.technicals import add_indicators
-from alerts.console_alert import send_alert, load_last_alert_state , log_decision , save_last_alert_state,del_last_alert_state
+from alerts.console_alert import send_alert, load_last_alert_state , log_decision , save_last_alert_state,del_last_alert_state, alert
 from agent.agent import evaluate_with_agent
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -37,70 +37,62 @@ def should_consider_trade(features: dict) -> bool:
     Basic gate / pre-filter: should we even look at PCS or CCS setups right now?
     Returns True only if general conditions are acceptable to consider a credit spread.
     """
+    message = ""
+
     # ─── Required minimum conditions ────────────────────────────────────────
     
     # 1. VIX not too low → premiums need to be decent
     if features["vix"] < 14.0:
-        print(f"VIX too low ({features['vix']}) — premiums likely too thin for good credit spreads.")
-        return False
+        message = f"VIX too low ({features['vix']}) — premiums likely too thin for good credit spreads."
     
     # 2. Not ridiculously high VIX (extreme fear / gap risk)
-    if features["vix"] > 38.0:
-        print(f"VIX too high ({features['vix']}) — extreme fear, gap risk, and likely not ideal for new credit spreads.")
-        return False
-
+    elif features["vix"] > 38.0:
+        message = f"VIX too high ({features['vix']}) — extreme fear, gap risk, and likely not ideal for new credit spreads."
+    
     # 3. Time window — best theta decay & lower gamma risk
-    minutes_left = features["time_to_close_min"]
-    if minutes_left > 330:   # before ~9:45–10:00 ET
-        print(f"Too early in the day ({features['current_time']}) — market just opened, not ideal for new credit spreads.")
-        return False
-    if minutes_left < 60:    # last hour — gamma explosion risk, especially 0DTE
-        print(f"Too late in the day ({features['current_time']}) — last hour, gamma risk increases significantly for 0DTE credit spreads.")
-        return False
-    
-    # 4. Trend filter — avoid fighting very strong short-term momentum
-    #    We want mild trend or range → good for credit spreads
-    slope_5  = features["ema21_slope_5min"]
-    slope_15 = features["ema21_slope_15min"]
-    ret5     = features["ret_5min_pct"]
-    ret15    = features["ret_15min_pct"]
+    else:
+        minutes_left = features["time_to_close_min"]
+        if minutes_left > 330:   # before ~9:45–10:00 ET
+            message = f"Too early in the day ({features['current_time']}) — market just opened, not ideal for new credit spreads."
+        elif minutes_left < 60:    # last hour — gamma explosion risk, especially 0DTE
+            message = f"Too late in the day ({features['current_time']}) — last hour, gamma risk increases significantly for 0DTE credit spreads."
+        
+        # 4. Trend filter — avoid fighting very strong short-term momentum
+        #    We want mild trend or range → good for credit spreads
+        else:
+            slope_5  = features["ema21_slope_5min"]
+            slope_15 = features["ema21_slope_15min"]
+            ret5     = features["ret_5min_pct"]
+            ret15    = features["ret_15min_pct"]
 
-    # Very strong momentum in last 5–15 min → usually bad for new credit spreads
-    if abs(ret5) > 0.80 or abs(ret15) > 1.40:
-        print(f"Strong momentum detected (5min: {ret5}%, 15min: {ret15}%) — usually not ideal for new credit spreads.")
-        return False
-
-    # Very steep short-term slope → momentum is probably not exhausted yet
-    if abs(slope_5) > 3.0:   # adjust threshold after backtesting (~3–4 pts/min is fast)
-        print(f"Steep short-term slope detected (5min EMA21 slope: {slope_5} pts/min) — momentum may not be exhausted, not ideal for new credit spreads.")
-        return False
-
-    # ─── Optional / tunable filters (comment out if too restrictive) ─────────
-
-    # Premium ratio extremely skewed → might indicate directional conviction
-    if features["premium_ratio"] < 3.0 :
-        print(f"Premium ratio too low ({features['premium_ratio']}) — may indicate directional bias, not ideal for balanced credit spreads.")
-        return False
-
-    # RSI in extreme territory → usually better to wait for mean reversion
-    # (you may want to remove this line if you LIKE fading extremes)
-    if features["rsi"] < 18 or features["rsi"] > 82:
-        print(f"RSI in extreme territory ({features['rsi']}) — may indicate overbought/oversold conditions, often better to wait for mean reversion before opening new credit spreads.")
-        return False
-    
-    # RSI is not very high or low
-    if features["rsi"] > 40 and features["rsi"] < 60:
-        print(f"RSI is neutral ({features['rsi']}) — may indicate lack of momentum, not ideal for new credit spreads which often benefit from some directional bias.")
-        return False
+            # Very strong momentum in last 5–15 min → usually bad for new credit spreads
+            if abs(ret5) > 0.80 or abs(ret15) > 1.40:
+                message = f"Strong momentum detected (5min: {ret5}%, 15min: {ret15}%) — usually not ideal for new credit spreads."
+            # Very steep short-term slope → momentum is probably not exhausted yet
+            elif abs(slope_5) > 3.0:   # adjust threshold after backtesting (~3–4 pts/min is fast)
+                message = f"Steep short-term slope detected (5min EMA21 slope: {slope_5} pts/min) — momentum may not be exhausted, not ideal for new credit spreads."
+            
+            # ─── Optional / tunable filters (comment out if too restrictive) ─────────
+            elif features["premium_ratio"] < 3.0:
+                message = f"Premium ratio too low ({features['premium_ratio']}) — may indicate directional bias, not ideal for balanced credit spreads."
+            elif features["rsi"] < 18 or features["rsi"] > 82:
+                message = f"RSI in extreme territory ({features['rsi']}) — may indicate overbought/oversold conditions, often better to wait for mean reversion before opening new credit spreads."
+            elif features["rsi"] > 40 and features["rsi"] < 60:
+                message = f"RSI is neutral ({features['rsi']}) — may indicate lack of momentum, not ideal for new credit spreads which often benefit from some directional bias."
 
     # ─── If we passed everything → okay to evaluate PCS / CCS logic next ─────
-    return True
+    if not message:
+        return True
+
+    alert(features["current_time"] + "--" + message,silent=True)
+    print(message)
+    return False
 
 def main():
 
     ##"2026-02-12" -- big down day
-    date_in = "2026-02-23" #"2026-01-29" #"2026-01-30" # live
-    time_in = "09:30:00" #"10:30:00" #"10:30:00"
+    date_in = "2026-02-23" #"2026-02-23" #"2026-01-29" #"2026-01-30" # live
+    time_in = "09:30:00" #"09:30:00" #"10:30:00" #"10:30:00"
     config = load_config()
 
     state = load_last_alert_state()
@@ -158,7 +150,7 @@ def main():
                         # ─── 0DTE + time sensitive ───
                         "premium_ratio": round(latest["premium_ratio"], 2),
                         "time_to_close_min": int(latest["time_to_close"]),
-                        "current_time": latest.name.strftime("%H:%M ET"),
+                        "current_time": latest.name.strftime('%Y-%m-%d %H:%M:%S'),
                         
 
                         # ─── Position vs structure (most important upgrades) ───
