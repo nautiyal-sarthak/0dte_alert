@@ -52,7 +52,7 @@ def should_consider_trade(features: dict) -> bool:
     # 3. Time window — best theta decay & lower gamma risk
     else:
         minutes_left = features["time_to_close_min"]
-        if minutes_left > 330:   # before ~9:45–10:00 ET
+        if minutes_left > 360:   # before ~9:45–10:00 ET
             message = f"Too early in the day ({features['current_time']}) — market just opened, not ideal for new credit spreads."
         elif minutes_left < 60:    # last hour — gamma explosion risk, especially 0DTE
             message = f"Too late in the day ({features['current_time']}) — last hour, gamma risk increases significantly for 0DTE credit spreads."
@@ -73,7 +73,7 @@ def should_consider_trade(features: dict) -> bool:
                 message = f"Steep short-term slope detected (5min EMA21 slope: {slope_5} pts/min) — momentum may not be exhausted, not ideal for new credit spreads."
             
             # ─── Optional / tunable filters (comment out if too restrictive) ─────────
-            elif features["premium_ratio"] < 3.0:
+            elif features["premium_ratio"] <= 3.0:
                 message = f"Premium ratio too low ({features['premium_ratio']}) — may indicate directional bias, not ideal for balanced credit spreads."
             elif features["rsi"] < 18 or features["rsi"] > 82:
                 message = f"RSI in extreme territory ({features['rsi']}) — may indicate overbought/oversold conditions, often better to wait for mean reversion before opening new credit spreads."
@@ -91,8 +91,8 @@ def should_consider_trade(features: dict) -> bool:
 def main():
 
     ##"2026-02-12" -- big down day
-    date_in = "2026-02-23" #"2026-02-23" #"2026-01-29" #"2026-01-30" # live
-    time_in = "09:30:00" #"09:30:00" #"10:30:00" #"10:30:00"
+    date_in = None #"2026-02-26" #"2026-02-23" #"2026-02-23" #"2026-01-29" #"2026-01-30" # live
+    time_in = None #"12:00:00" #"09:30:00" #"09:30:00" #"10:30:00" #"10:30:00"
     config = load_config()
 
     state = load_last_alert_state()
@@ -104,9 +104,11 @@ def main():
     # get data for last working day from date_in as string
     if not date_in or date_in.strip() == "":
         last_working_day = pd.Timestamp.now(tz="America/New_York") - pd.offsets.BDay(1)
+        current_day_end = pd.Timestamp.now(tz="America/New_York").replace(hour=16, minute=0, second=0, microsecond=0)
         run_type = "live"
     else:
         last_working_day = pd.to_datetime(date_in) - pd.offsets.BDay(1)
+        current_day_end = pd.to_datetime(date_in).replace(hour=16, minute=0, second=0, microsecond=0)
         run_type = "backtest"
     
     last_working_day = last_working_day.strftime("%Y-%m-%d")
@@ -216,10 +218,12 @@ def main():
         time.sleep(config[run_type]["fetch_interval_sec"])
         print("-" * 50)
 
-        # close the while loop if features['time_to_close_min'] is zer0
-        # if features["time_to_close_min"] <= 0:
-        #     print("Market closed — ending monitor.")
-        #     break
+        # exit the loop if we latest.name.strftime('%Y-%m-%d %H:%M:%S') is equal to  current_day_end
+        if latest.name >= current_day_end:
+            print(f"Reached end of day ({current_day_end}), exiting.")
+            break
+
+        
 
 if __name__ == "__main__":
     main()

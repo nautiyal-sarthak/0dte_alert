@@ -10,7 +10,6 @@ Rules:
 - if market moving down rapidly and oversold, wait for pullback to SELL_PUT.
 - If signals conflict, return NONE.
 - Confidence must reflect setup quality, not excitement.
-- wait for the moment when the conditions are overbought/oversold and high OTM Premium Ratio.
 """
 
 USER_PROMPT_TEMPLATE = """

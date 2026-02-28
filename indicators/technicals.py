@@ -35,6 +35,7 @@ def add_indicators(df, rsi_period=14):
     df['bb_middle']  = bb.bollinger_mavg()
     df['bb_lower']   = bb.bollinger_lband()
 
+    # Premium ratio: how expensive are OTM options relative to expected move?
     df['premium_ratio'] = df['spxOTMBids'] / df['spxExpectedMove'].replace(0, np.nan)
 
     # Time to close (assuming 16:00 ET close)
