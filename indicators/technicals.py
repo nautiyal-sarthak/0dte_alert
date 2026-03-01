@@ -59,8 +59,8 @@ def add_indicators(df, rsi_period=14):
     df['ema21_slope_30min'] = df['ema21'].diff(6) / 30    # 30 min = 6 rows
 
     # Recent returns (very interpretable for "keeps falling / rising")
-    df['ret_5min']   = df['spx'].pct_change(1)            # 5 min = 1 row
-    df['ret_15min']  = df['spx'].pct_change(3)            # 15 min = 3 rows
-    df['ret_30min']  = df['spx'].pct_change(6)            # 30 min = 6 rows
+    df['ret_5min']   = df['spx'].pct_change(1) * 100            # 5 min = 1 row
+    df['ret_15min']  = df['spx'].pct_change(3) * 100      # 15 min = 3 rows
+    df['ret_30min']  = df['spx'].pct_change(6) * 100      # 30 min = 6 rows
 
     return df

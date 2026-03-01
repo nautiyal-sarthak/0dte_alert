@@ -166,9 +166,9 @@ def main():
                         "ema21_slope_30min": round(latest["ema21_slope_30min"], 6),
 
                         
-                        "ret_5min_pct":   round(latest.get("ret_5min", 0) * 100, 2),
-                        "ret_15min_pct":  round(latest.get("ret_15min", 0) * 100, 2),
-                        "ret_30min_pct":  round(latest.get("ret_30min", 0) * 100, 2),
+                        "ret_5min_pct":   round(latest.get("ret_5min", 0) , 2),
+                        "ret_15min_pct":  round(latest.get("ret_15min", 0) , 2),
+                        "ret_30min_pct":  round(latest.get("ret_30min", 0) , 2),
 
                         # Optional safety net: full row if you want to allow pattern spotting
                         #"raw_row": latest.to_dict()   # ← only if token budget allows
