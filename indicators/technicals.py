@@ -5,6 +5,9 @@ import pandas as pd
 import numpy as np
 
 
+er_threshold = 0.35   # Kaufman's Efficiency Ratio threshold for "Trending" day
+
+
 def add_indicators(df, rsi_period=14):
     """
     Adds standard technical indicators + context / regime features
@@ -20,6 +23,28 @@ def add_indicators(df, rsi_period=14):
 
     df = df.copy()  # avoid modifying original
 
+    df['date'] = df.index.date  # Extract the date part from the DatetimeIndex
+
+    daily_er = df.groupby('date')['spx'].apply(
+        lambda prices: (
+            abs(prices.iloc[-1] - prices.iloc[0]) / prices.diff().abs().sum()
+            if (len(prices) > 1 and prices.diff().abs().sum() > 0)
+            else 0.0
+        )
+    ).rename('er')
+
+    df = df.merge(daily_er, how='left', left_on='date', right_index=True)
+
+
+    # Updated classification (replaces the old range-vs-ATR logic)
+    df['day_type'] = np.where(
+        df['er'] > er_threshold, 'Trending', 'Range-bound'
+    )
+
+
+    # Drop the temporary 'date' column if not needed
+    df.drop(columns=['date'], inplace=True)
+    
     # ───────────────────────────────────────────────
     # 1. Standard indicators (your original ones)
     # ───────────────────────────────────────────────
@@ -59,8 +84,8 @@ def add_indicators(df, rsi_period=14):
     df['ema21_slope_30min'] = df['ema21'].diff(6) / 30    # 30 min = 6 rows
 
     # Recent returns (very interpretable for "keeps falling / rising")
-    df['ret_5min']   = df['spx'].pct_change(1)            # 5 min = 1 row
-    df['ret_15min']  = df['spx'].pct_change(3)            # 15 min = 3 rows
-    df['ret_30min']  = df['spx'].pct_change(6)            # 30 min = 6 rows
+    df['ret_5min']   = df['spx'].pct_change(1) * 100           # 5 min = 1 row
+    df['ret_15min']  = df['spx'].pct_change(3) * 100           # 15 min = 3 rows
+    df['ret_30min']  = df['spx'].pct_change(6) * 100           # 30 min = 6 rows
 
     return df

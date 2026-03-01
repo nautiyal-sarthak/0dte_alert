@@ -34,65 +34,118 @@ def load_config():
 
 def should_consider_trade(features: dict) -> bool:
     """
-    Basic gate / pre-filter: should we even look at PCS or CCS setups right now?
-    Returns True only if general conditions are acceptable to consider a credit spread.
+    Regime-aware pre-filter for 0DTE credit spreads.
+    Applies different logic depending on day_type:
+    - "Trending"
+    - "Range-bound"
     """
+
     message = ""
+    day_type = features.get("day_type", "Trending")
 
-    # ─── Required minimum conditions ────────────────────────────────────────
-    
-    # 1. VIX not too low → premiums need to be decent
-    if features["vix"] < 14.0:
-        message = f"VIX too low ({features['vix']}) — premiums likely too thin for good credit spreads."
-    
-    # 2. Not ridiculously high VIX (extreme fear / gap risk)
-    elif features["vix"] > 38.0:
-        message = f"VIX too high ({features['vix']}) — extreme fear, gap risk, and likely not ideal for new credit spreads."
-    
-    # 3. Time window — best theta decay & lower gamma risk
+    vix = features["vix"]
+    minutes_left = features["time_to_close_min"]
+
+    slope_5  = features["ema21_slope_5min"]
+    slope_15 = features["ema21_slope_15min"]
+    ret5     = features["ret_5min_pct"]
+    ret15    = features["ret_15min_pct"]
+    rsi      = features["rsi"]
+    premium_ratio = features["premium_ratio"]
+    bb_upper = features["bb_upper"]
+    bb_lower = features["bb_lower"]
+    current_price = features["current_price"]
+    bb_position = (current_price - bb_lower) / (bb_upper - bb_lower)
+
+    # ─────────────────────────────────────────────────────────────
+    # 1️⃣ Global Hard Risk Filters (Apply to ALL regimes)
+    # ─────────────────────────────────────────────────────────────
+
+    if vix < 13.0:
+        message = f"VIX too low ({vix}) — premiums too thin."
+    elif vix > 40.0:
+        message = f"VIX extremely high ({vix}) — elevated gap risk."
+    elif minutes_left > 360:
+        message = f"Too early in the session ({features['current_time']})."
+    elif minutes_left < 60:
+        message = f"Too late in the session ({features['current_time']}) — gamma risk elevated."
+
+    # ─────────────────────────────────────────────────────────────
+    # 2️⃣ Regime-Specific Logic
+    # ─────────────────────────────────────────────────────────────
     else:
-        minutes_left = features["time_to_close_min"]
-        if minutes_left > 360:   # before ~9:45–10:00 ET
-            message = f"Too early in the day ({features['current_time']}) — market just opened, not ideal for new credit spreads."
-        elif minutes_left < 60:    # last hour — gamma explosion risk, especially 0DTE
-            message = f"Too late in the day ({features['current_time']}) — last hour, gamma risk increases significantly for 0DTE credit spreads."
-        
-        # 4. Trend filter — avoid fighting very strong short-term momentum
-        #    We want mild trend or range → good for credit spreads
+
+        # ==========================================================
+        # 📈 TRENDING DAY LOGIC
+        # ==========================================================
+        if day_type == "Trending":
+
+            # Avoid explosive continuation
+            if abs(ret5) > 0.8 or abs(ret15) > 1.4:
+                message = f"Strong momentum (5m: {ret5}%, 15m: {ret15}%) — avoid chasing."
+
+            # Avoid ultra steep slope
+            elif abs(slope_5) > 3.0:
+                message = f"Steep slope ({slope_5}) — trend not exhausted."
+
+            # Neutral RSI = weak edge on trend days
+            elif 35 < rsi < 65:
+                message = f"RSI neutral ({rsi}) — weak directional edge for trending day."
+
+            # Premium imbalance suggests directional pressure
+            elif premium_ratio <= 3.0:
+                message = f"Premium ratio low ({premium_ratio}) — possible directional skew."
+
+        # ==========================================================
+        # 📉 RANGE-BOUND DAY LOGIC
+        # ==========================================================
+        elif day_type == "Range-bound":
+
+            # In range days, strong movement = breakout risk
+            if abs(ret5) > 0.6 or abs(ret15) > 1.0:
+                message = f"Movement too strong for range day (5m: {ret5}%, 15m: {ret15}%) — breakout risk."
+
+            # Slopes should be flat
+            elif abs(slope_5) > 2.0:
+                message = f"Slope too steep ({slope_5}) — not ideal for range structure."
+
+            # Extreme RSI in range day may signal breakout attempt
+            elif rsi < 20 or rsi > 80:
+                message = f"RSI extreme ({rsi}) — range may be breaking."
+
+            # 3️⃣ HARD FILTER: avoid mid-range zone
+            elif 0.35 < bb_position < 0.65:
+                message = f"Price in middle of range (BB pos {bb_position:.2f}) — no edge."
+
+
+            # 4️⃣ Require at least mild RSI stretch
+            elif 42 <= rsi <= 58:
+                message = f"RSI too neutral ({rsi}) for high-probability mean reversion."
+
+            # Premium ratio can be lower in range days
+            elif premium_ratio < 3.0:
+                message = f"Premium ratio too compressed ({premium_ratio}) even for range day."
+
         else:
-            slope_5  = features["ema21_slope_5min"]
-            slope_15 = features["ema21_slope_15min"]
-            ret5     = features["ret_5min_pct"]
-            ret15    = features["ret_15min_pct"]
+            message = f"Unknown day_type: {day_type}"
 
-            # Very strong momentum in last 5–15 min → usually bad for new credit spreads
-            if abs(ret5) > 0.80 or abs(ret15) > 1.40:
-                message = f"Strong momentum detected (5min: {ret5}%, 15min: {ret15}%) — usually not ideal for new credit spreads."
-            # Very steep short-term slope → momentum is probably not exhausted yet
-            elif abs(slope_5) > 3.0:   # adjust threshold after backtesting (~3–4 pts/min is fast)
-                message = f"Steep short-term slope detected (5min EMA21 slope: {slope_5} pts/min) — momentum may not be exhausted, not ideal for new credit spreads."
-            
-            # ─── Optional / tunable filters (comment out if too restrictive) ─────────
-            elif features["premium_ratio"] <= 3.0:
-                message = f"Premium ratio too low ({features['premium_ratio']}) — may indicate directional bias, not ideal for balanced credit spreads."
-            elif features["rsi"] < 18 or features["rsi"] > 82:
-                message = f"RSI in extreme territory ({features['rsi']}) — may indicate overbought/oversold conditions, often better to wait for mean reversion before opening new credit spreads."
-            elif features["rsi"] > 40 and features["rsi"] < 60:
-                message = f"RSI is neutral ({features['rsi']}) — may indicate lack of momentum, not ideal for new credit spreads which often benefit from some directional bias."
-
-    # ─── If we passed everything → okay to evaluate PCS / CCS logic next ─────
+    # ─────────────────────────────────────────────────────────────
+    # 3️⃣ Final Decision
+    # ─────────────────────────────────────────────────────────────
     if not message:
         return True
 
-    alert(features["current_time"] + "--" + message,silent=True)
+    alert(features["current_time"] + "--" + message, silent=True)
     print(message)
     return False
 
 def main():
 
     ##"2026-02-12" -- big down day
-    date_in = None #"2026-02-26" #"2026-02-23" #"2026-02-23" #"2026-01-29" #"2026-01-30" # live
-    time_in = None #"12:00:00" #"09:30:00" #"09:30:00" #"10:30:00" #"10:30:00"
+    ##"2026-02-27" -- range day
+
+    date_in = "2026-02-23" #"2026-02-23" #"2026-02-23" #"2026-01-29" #"2026-01-30" # live
+    time_in = "09:30:00" #"09:30:00" #"09:30:00" #"10:30:00" #"10:30:00"
     config = load_config()
 
     state = load_last_alert_state()
@@ -121,12 +174,12 @@ def main():
         try:
             df = fetch_market_data(config["api"],config[run_type]['interval_min'],date_in=date_in, time_in=time_in)
 
-            history = pd.concat([history, df])
-            history = history.tail(config[run_type]["history_size"])
+            all_df = pd.concat([history, df])
+            all_df = all_df.tail(config[run_type]["history_size"])
 
-            history = add_indicators(history, config["indicators"]["rsi_period"])
+            all_df = add_indicators(all_df, config["indicators"]["rsi_period"])
 
-            latest = history.iloc[-1]
+            latest = all_df.iloc[-1]
 
             # check if current_time is equal to the time_in or todays date if time_in is None
             
@@ -137,6 +190,7 @@ def main():
                         "current_price": round(latest["spx"], 2),
                         "expected_move": round(latest["spxExpectedMove"], 2),
                         "vix": round(latest["vix"], 2),
+                        "day_type": latest["day_type"],
                         
                         # ─── Momentum classics ───
                         "rsi": round(latest["rsi"], 1),
@@ -166,9 +220,9 @@ def main():
                         "ema21_slope_30min": round(latest["ema21_slope_30min"], 6),
 
                         
-                        "ret_5min_pct":   round(latest.get("ret_5min", 0) * 100, 2),
-                        "ret_15min_pct":  round(latest.get("ret_15min", 0) * 100, 2),
-                        "ret_30min_pct":  round(latest.get("ret_30min", 0) * 100, 2),
+                        "ret_5min_pct":   round(latest.get("ret_5min", 0), 2),
+                        "ret_15min_pct":  round(latest.get("ret_15min", 0), 2),
+                        "ret_30min_pct":  round(latest.get("ret_30min", 0), 2),
 
                         # Optional safety net: full row if you want to allow pattern spotting
                         #"raw_row": latest.to_dict()   # ← only if token budget allows
@@ -219,7 +273,7 @@ def main():
         print("-" * 50)
 
         # exit the loop if we latest.name.strftime('%Y-%m-%d %H:%M:%S') is equal to  current_day_end
-        if latest.name >= current_day_end:
+        if latest.name >= current_day_end.tz_localize(latest.name.tzinfo):
             print(f"Reached end of day ({current_day_end}), exiting.")
             break
 
