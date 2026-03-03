@@ -17,6 +17,7 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
+*.cpython-*
 dist/
 build/
 
