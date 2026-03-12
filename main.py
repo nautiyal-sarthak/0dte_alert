@@ -91,8 +91,8 @@ def should_consider_trade(features: dict) -> bool:
 def main():
 
     ##"2026-02-12" -- big down day
-    date_in = "2026-03-02" #"2026-02-26" #"2026-02-23" #"2026-02-23" #"2026-01-29" #"2026-01-30" # live
-    time_in = "09:30:00" #"12:00:00" #"09:30:00" #"09:30:00" #"10:30:00" #"10:30:00"
+    date_in = None #"2026-02-26" #"2026-02-23" #"2026-02-23" #"2026-01-29" #"2026-01-30" # live
+    time_in = None #"12:00:00" #"09:30:00" #"09:30:00" #"10:30:00" #"10:30:00"
     config = load_config()
 
     state = load_last_alert_state()
@@ -103,7 +103,7 @@ def main():
     
     # get data for last working day from date_in as string
     if not date_in or date_in.strip() == "":
-        last_working_day = pd.Timestamp.now(tz="America/New_York") - pd.offsets.BDay(1)
+        last_working_day = pd.Timestamp.now(tz="America/New_York") - pd.offsets.BDay(3)
         current_day_end = pd.Timestamp.now(tz="America/New_York").replace(hour=16, minute=0, second=0, microsecond=0)
         run_type = "live"
     else:
@@ -215,13 +215,14 @@ def main():
         except Exception as e:
             print("❌ Error:", e)
 
+        print("slleping for", config[run_type]["fetch_interval_sec"], "seconds...\n")
         time.sleep(config[run_type]["fetch_interval_sec"])
         print("-" * 50)
 
         # exit the loop if we latest.name.strftime('%Y-%m-%d %H:%M:%S') is equal to  current_day_end
-        if latest.name >= current_day_end.tz_localize(latest.name.tzinfo):
-            print(f"Reached end of day ({current_day_end}), exiting.")
-            break
+        # if latest.name >= current_day_end.tz_localize(latest.name.tzinfo):
+        #     print(f"Reached end of day ({current_day_end}), exiting.")
+        #     break
 
         
 
