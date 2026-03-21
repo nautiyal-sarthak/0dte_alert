@@ -4,6 +4,10 @@ Collecting workspace information
 
 This project is a Python-based SPX 0-DTE options trading bot that fetches market data, calculates technical indicators, evaluates trading conditions using an AI agent, and sends alerts for potential trades.
 
+## 🔧 OpenClaw Integration
+
+This fork has been optimized for seamless integration with OpenClaw's cron job system, providing automated monitoring and alerts for 0DTE options trading opportunities.
+
 ---
 
 ## Features
@@ -24,13 +28,32 @@ This project is a Python-based SPX 0-DTE options trading bot that fetches market
 
 ---
 
-## Setup Instructions
+## 🚀 Quick Setup for OpenClaw
+
+### Option A: Automated Setup (Recommended)
+
+```bash
+# Run the automated setup script
+chmod +x setup_openclaw.sh
+./setup_openclaw.sh
+
+# Edit the .env file with your API keys
+nano .env
+
+# Test the setup
+./openclaw_runner.py
+
+# Add to OpenClaw cron (example: every 30 minutes during market hours)
+openclaw cron add '*/30 9-16 * * 1-5' './openclaw_runner.py' --workdir $(pwd)
+```
+
+### Option B: Manual Setup
 
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
-cd <repository-folder>
+git clone https://github.com/sarthakbotnautiyal-coder/0dte_alert.git
+cd 0dte_alert
 ```
 
 ---
